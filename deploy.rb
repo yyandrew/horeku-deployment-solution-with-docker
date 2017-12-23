@@ -25,8 +25,19 @@ class Deployer
     remote_deploy
   end
 
+  def rollback
+    puts 'Fetching last revision from remote server.'
+    previous_revision = `#{ssh_command} docker images | grep -v 'none\|latest\|REPOSITORY' | awk '{print $2}' | sed -n 2p`.strip
+    abort('No previous revision found.') if previous_revision == ''
+    puts "Previous revision found: #{previous_revision}"
+    puts "Restarting application!"
+    system("#{ssh_command} 'docker stop \$(docker ps -q)'")
+    system("#{ssh_command} docker run --name #{deploy_user} #{APPLICATION_CONTAINER}:#{previous_revision}")
+  end
+
   private
 
+  # To check if there are any file changes present, and aborting the deploy if true
   def check_changed_files
     return unless `git -C #{APPLICATION_PATH} status --short | wc -l`
                   .to_i.positive?
@@ -37,6 +48,7 @@ class Deployer
     system("cp #{APPLICATION_PATH}/Gemfile* .")
   end
 
+  # Compresses the whole application in a single file, that will be included in the container later
   def compress_application
     system("tar -zcf #{APPLICATION_FILE} #{APPLICATION_PATH}")
   end
